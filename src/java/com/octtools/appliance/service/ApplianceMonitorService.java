@@ -2,11 +2,8 @@ package com.octtools.appliance.service;
 
 import com.octtools.appliance.client.ApplianceApiClient;
 import com.octtools.appliance.model.Appliance;
-import com.octtools.appliance.model.Operation;
 import com.octtools.appliance.model.api.AppliancePageResponse;
-import com.octtools.appliance.model.api.DrainResponse;
-import com.octtools.appliance.model.api.RemediateResponse;
-import com.octtools.appliance.repository.OperationRepository;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,13 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import static com.octtools.appliance.config.ConfigProperties.API_PAGE_SIZE;
 import static com.octtools.appliance.config.ConfigProperties.PROCESSING_STALE_THRESHOLD_MINUTES;

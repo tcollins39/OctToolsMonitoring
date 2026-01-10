@@ -27,13 +27,13 @@ class ApplianceMonitorServiceTest {
     private ApplianceApiClient apiClient;
     
     @Mock
-    private RemediationQueue remediationQueue;
+    private RemediationProcessor remediationProcessor;
     
     private ApplianceMonitorService service;
     
     @BeforeEach
     void setUp() {
-        service = new ApplianceMonitorService(apiClient, remediationQueue, 10, 10); // pageSize=10, threshold=10min
+        service = new ApplianceMonitorService(apiClient, remediationProcessor, 10, 10); // pageSize=10, threshold=10min
     }
     
     @Test
@@ -114,7 +114,7 @@ class ApplianceMonitorServiceTest {
         service.collectAndQueueStaleAppliances();
         
         verify(apiClient).getAppliances(null, 10);
-        verify(remediationQueue).addAppliances(any());
+        verify(remediationProcessor).processAppliance(any());
     }
 
     @Test
@@ -138,6 +138,6 @@ class ApplianceMonitorServiceTest {
         
         verify(apiClient).getAppliances(null, 10);
         verify(apiClient).getAppliances("cursor-page2", 10);
-        verify(remediationQueue).addAppliances(argThat(appliances -> appliances.size() == 2));
+        verify(remediationProcessor, times(2)).processAppliance(any());
     }
 }

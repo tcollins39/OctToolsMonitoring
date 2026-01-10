@@ -8,6 +8,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RemediateResponse {
-    private Long remediationId;              // API returns Long
+    private String remediationId;            // API returns String UUID
     private String remediationResult;        // "SUCCESS" or other status
 }

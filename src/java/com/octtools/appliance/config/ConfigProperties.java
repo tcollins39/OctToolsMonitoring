@@ -13,9 +13,6 @@ public final class ConfigProperties {
     public static final String PROCESSING_STALE_THRESHOLD_MINUTES = "${appliance.processing.stale-threshold-minutes}";
     public static final String PROCESSING_THREAD_POOL_SIZE = "${appliance.processing.thread-pool-size}";
     
-    // Queue Configuration
-    public static final String QUEUE_MAX_SIZE = "${appliance.queue.max-size}";
-    
     private ConfigProperties() {
         // Utility class - prevent instantiation
     }

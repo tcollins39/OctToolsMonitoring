@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -27,18 +26,12 @@ import static com.octtools.appliance.config.ConfigProperties.PROCESSING_ACTOR_EM
 @Service
 @Slf4j
 public class RemediationProcessor {
-    
-    // Process queue every 100ms for high-throughput processing
-    private static final int QUEUE_PROCESSING_DELAY_MS = 100;
-    
     private final ApplianceApiClient apiClient;
-    private final RemediationQueue remediationQueue;
     private final OperationRepository operationRepository;
     private final ExecutorService processingExecutor;
 
     public RemediationProcessor(
             ApplianceApiClient apiClient,
-            RemediationQueue remediationQueue,
             OperationRepository operationRepository,
             @Value(PROCESSING_THREAD_POOL_SIZE) int threadPoolSize,
             @Value(PROCESSING_ACTOR_EMAIL) String actorEmail) {
@@ -46,14 +39,13 @@ public class RemediationProcessor {
         validateInputs(threadPoolSize, actorEmail);
         
         this.apiClient = apiClient;
-        this.remediationQueue = remediationQueue;
         this.operationRepository = operationRepository;
         this.processingExecutor = new ThreadPoolExecutor(
             threadPoolSize, 
             threadPoolSize, 
             0L, 
             TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(50),
+            new ArrayBlockingQueue<>(100),
             new ThreadPoolExecutor.AbortPolicy()
         );
         
@@ -70,27 +62,15 @@ public class RemediationProcessor {
         }
     }
 
-    @Scheduled(fixedDelay = QUEUE_PROCESSING_DELAY_MS)
-    public void processRemediationQueue() {
-        Appliance appliance = remediationQueue.pollOne();
-        
-        if (appliance == null) {
-            return;
-        }
-        
-        log.debug("Processing appliance: {}", appliance.getId());
-        
+    public void processAppliance(Appliance appliance) {
         try {
-            CompletableFuture.runAsync(() -> processAppliance(appliance), processingExecutor);
+            processingExecutor.submit(() -> processApplianceInternal(appliance));
         } catch (RejectedExecutionException e) {
-            log.warn("Executor queue full, re-queuing appliance: {}", appliance.getId());
-            remediationQueue.markCompleted(appliance.getId());
-            remediationQueue.addAppliances(List.of(appliance));
-            log.info("METRIC: appliance.processing.queue.rejection.count=1");
+            log.warn("Executor queue full, skipping appliance {} - will retry next cycle", appliance.getId());
         }
     }
 
-    private void processAppliance(Appliance appliance) {
+    private void processApplianceInternal(Appliance appliance) {
         String applianceId = appliance.getId();
         log.debug("Processing appliance: {}", applianceId);
         
@@ -107,10 +87,8 @@ public class RemediationProcessor {
                     applianceId, drainResponse.getDrainId(), remediateResponse.getRemediationId());
             
             log.info("METRIC: appliance.processing.success.count=1");
-            
-        } finally {
-            // Always remove from processing set, even on failure
-            remediationQueue.markCompleted(applianceId);
+        } catch (Exception e) {
+            log.error("Failed to process appliance {}: {}", applianceId, e.getMessage());
         }
     }
 

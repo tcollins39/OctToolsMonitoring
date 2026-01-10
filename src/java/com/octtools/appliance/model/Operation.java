@@ -24,8 +24,8 @@ public class Operation {
     private String applianceId;
     private String operationType;
     private Instant processedAt;
-    private Long drainId;
+    private String drainId;
     private String estimatedTimeToDrain;
-    private Long remediationId;
+    private String remediationId;
     private String remediationResult;
 }

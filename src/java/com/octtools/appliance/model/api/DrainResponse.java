@@ -8,6 +8,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DrainResponse {
-    private Long drainId;                    // API returns Long
+    private String drainId;                  // API returns UUID string
     private String estimatedTimeToDrain;     // ISO-8601 duration format
 }

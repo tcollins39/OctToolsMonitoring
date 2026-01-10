@@ -2,7 +2,11 @@ package com.octtools.appliance.service;
 
 import com.octtools.appliance.client.ApplianceApiClient;
 import com.octtools.appliance.model.Appliance;
+import com.octtools.appliance.model.Operation;
 import com.octtools.appliance.model.api.AppliancePageResponse;
+import com.octtools.appliance.model.api.DrainResponse;
+import com.octtools.appliance.model.api.RemediateResponse;
+import com.octtools.appliance.repository.OperationRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,6 +16,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static com.octtools.appliance.config.ConfigProperties.API_PAGE_SIZE;
 import static com.octtools.appliance.config.ConfigProperties.PROCESSING_STALE_THRESHOLD_MINUTES;
@@ -25,21 +34,24 @@ public class ApplianceMonitorService {
     
     private static final String LIVE_STATUS = "LIVE";
     
+    private int totalAppliancesProcessed;
+    private int staleAppliancesFound;
+    
     private final ApplianceApiClient apiClient;
-    private final RemediationQueue remediationQueue;
+    private final RemediationProcessor remediationProcessor;
     private final int pageSize;
     private final Duration staleThreshold;
 
     public ApplianceMonitorService(
             ApplianceApiClient apiClient,
-            RemediationQueue remediationQueue,
+            RemediationProcessor remediationProcessor,
             @Value(API_PAGE_SIZE) int pageSize,
             @Value(PROCESSING_STALE_THRESHOLD_MINUTES) int staleThresholdMinutes) {
         
         validateInputs(pageSize, staleThresholdMinutes);
         
         this.apiClient = apiClient;
-        this.remediationQueue = remediationQueue;
+        this.remediationProcessor = remediationProcessor;
         this.pageSize = pageSize;
         this.staleThreshold = Duration.ofMinutes(staleThresholdMinutes);
         
@@ -62,17 +74,15 @@ public class ApplianceMonitorService {
         Instant startTime = Instant.now();
         
         try {
-            List<Appliance> allAppliances = fetchAllAppliances();
-            List<Appliance> staleAppliances = filterStaleAppliances(allAppliances);
-            remediationQueue.addAppliances(staleAppliances);
+            fetchAndQueueStaleAppliances();
             
             Duration elapsed = Duration.between(startTime, Instant.now());
             log.info("Collection cycle completed: {} total appliances, {} stale (took {}ms)", 
-                    allAppliances.size(), staleAppliances.size(), elapsed.toMillis());
+                    totalAppliancesProcessed, staleAppliancesFound, elapsed.toMillis());
             
             // Emit metrics for monitoring
-            log.info("METRIC: appliances.total.count={}", allAppliances.size());
-            log.info("METRIC: appliances.stale.count={}", staleAppliances.size());
+            log.info("METRIC: appliances.total.count={}", totalAppliancesProcessed);
+            log.info("METRIC: appliances.stale.count={}", staleAppliancesFound);
             log.info("METRIC: collection.duration.ms={}", elapsed.toMillis());
             
         } catch (Exception e) {
@@ -82,18 +92,29 @@ public class ApplianceMonitorService {
         }
     }
 
-    private List<Appliance> fetchAllAppliances() {
-        List<Appliance> allAppliances = new ArrayList<>();
+    private void fetchAndQueueStaleAppliances() {
+        totalAppliancesProcessed = 0;
+        staleAppliancesFound = 0;
         String after = null;
         int pageCount = 0;
+        Instant now = Instant.now();
         
         do {
             try {
                 AppliancePageResponse response = apiClient.getAppliances(after, pageSize);
                 
                 if (response != null && response.getData() != null) {
-                    allAppliances.addAll(response.getData());
+                    List<Appliance> pageAppliances = response.getData();
+                    totalAppliancesProcessed += pageAppliances.size();
                     pageCount++;
+                    
+                    // Filter and process stale appliances immediately
+                    for (Appliance appliance : pageAppliances) {
+                        if (needsRemediation(appliance, now)) {
+                            remediationProcessor.processAppliance(appliance);
+                            staleAppliancesFound++;
+                        }
+                    }
                     
                     if (response.getPageInfo() != null) {
                         after = response.getPageInfo().getEndCursor();
@@ -115,22 +136,10 @@ public class ApplianceMonitorService {
             
         } while (after != null);
         
-        log.debug("Fetched {} appliances across {} pages", allAppliances.size(), pageCount);
-        return allAppliances;
+        log.debug("Processed {} appliances across {} pages", totalAppliancesProcessed, pageCount);
     }
 
-    private List<Appliance> filterStaleAppliances(List<Appliance> appliances) {
-        Instant now = Instant.now();
-        List<Appliance> staleAppliances = new ArrayList<>();
-        
-        for (Appliance appliance : appliances) {
-            if (needsRemediation(appliance, now)) {
-                staleAppliances.add(appliance);
-            }
-        }
-        
-        return staleAppliances;
-    }
+
 
     boolean needsRemediation(Appliance appliance, Instant now) {
         // Must be LIVE status

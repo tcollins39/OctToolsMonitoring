@@ -9,7 +9,7 @@ This service connects to the OctTools external API to monitor appliances. When i
 ## How It Works
 
 1. ApplianceMonitorService - Checks for stale appliances every 5 minutes
-2. RemediationProcessor - Processes queued appliances every 100ms (high-throughput)  
+2. RemediationProcessor - Processes appliances immediately using async execution
 3. For each stale appliance: drain → record operation → remediate → record operation
 4. API created to view all completed operations via REST endpoints
 
@@ -25,38 +25,35 @@ This service connects to the OctTools external API to monitor appliances. When i
 ## Architecture
 
 ### Scheduling Strategy
-The application uses two separate scheduled tasks:
+The application uses a single scheduled task for monitoring with immediate async processing:
 
 - Data Collection (`@Scheduled(fixedRate = 300000)`) - Runs every 5 minutes to fetch appliances and identify stale ones
-- Queue Processing (`@Scheduled(fixedDelay = 100)`) - Runs every 100ms to process queued appliances one at a time
+- Immediate Processing - Stale appliances are submitted to a bounded executor for concurrent processing
 
-This separation ensures consistent monitoring intervals regardless of processing time and provides better fault isolation.
+This approach ensures consistent monitoring intervals while providing immediate processing of detected stale appliances.
 
 ### Concurrency Model
-- Single-threaded data collection
-- Multi-threaded queue processing using a bounded ThreadPoolExecutor (10 threads, 50-task queue)
-- One-at-a-time processing with natural backpressure and automatic re-queuing on overload
-- In-memory queue with overflow protection (max 1000 items)
-- Duplicate prevention using a processing set to avoid concurrent processing of same appliance
+- Single-threaded data collection with per-page processing
+- Multi-threaded appliance processing using a bounded ThreadPoolExecutor (50 threads, 100-task queue)
+- Immediate async processing with natural backpressure and graceful overflow handling
 
-### Queue Architecture Design
-The application implements a sophisticated queue management system with several key design decisions:
+### Processing Architecture Design
+The application implements immediate async processing with several key design decisions:
 
 Bounded Resources:
-- Input Queue: Maximum 1000 appliances to prevent memory exhaustion
-- Executor Queue: Maximum 50 tasks to provide backpressure
-- Thread Pool: Fixed 10 threads for predictable resource usage
+- Thread Pool: Fixed 50 threads for predictable resource usage
+- Executor Queue: Maximum 100 tasks to provide backpressure
+- Per-page Processing: Appliances processed as pages are collected
 
 Processing Strategy:
-- Processes single appliances every 100ms rather than batch processing
-- When executor queue fills, scheduler automatically slows down
-- Rejected tasks are re-queued for later processing
-- When a submission fails, external API failures trigger rediscovery on next monitoring cycle
+- Immediate submission of stale appliances to executor upon detection
+- When executor queue fills, overflow appliances are skipped and retried in next monitoring cycle
+- Concurrent processing of multiple appliances with proper error isolation
 
 State Management:
-- Duplicate Prevention: Processing set tracks appliances currently being handled
-- Proper Lifecycle: pollOne() removes from queue, markCompleted() removes from processing set
-- Rejection Handling: Failed executor submissions are cleaned up and re-queued
+- Graceful Overflow: When executor capacity exceeded, appliances are retried in next cycle
+- Error Isolation: Individual appliance failures don't affect processing of others
+- Automatic Recovery: Failed appliances are rediscovered and retried in subsequent monitoring cycles
 
 This architecture provides high throughput while maintaining bounded memory usage and graceful handling of overload conditions.
 
@@ -74,16 +71,14 @@ The application uses sensible defaults with minimal required configuration:
 ```yaml
 appliance:
   api:
-    base-url: https://oct-backend-homework.us-east-1.elasticbeanstalk.com
+    base-url: http://oct-backend-homework.us-east-1.elasticbeanstalk.com:8080
     auth-header: Basic b2N0QXBwbGljYW50OmIwZTg1YWE4LWQ2YWUtNGQzYi1iODA5LTA0ZDIwN2VkZTNmNQ==
-    page-size: 100
+    page-size: 500
     timeout-seconds: 30
   processing:
     actor-email: engineer@company.com
     stale-threshold-minutes: 10
-    thread-pool-size: 10
-  queue:
-    max-size: 1000
+    thread-pool-size: 50
 ```
 
 ## Running the Application
@@ -274,35 +269,12 @@ Watch application logs to see real-time processing:
 
 Important: Operation data is stored in-memory only and is lost when the application restarts. This is appropriate for the assignment scope but would need database persistence for production use.
 
-## Business Logic
-
-### Stale Appliance Detection
-An appliance needs remediation if:
-1. `opStatus == "LIVE"`
-2. `lastHeardFromOn` is null OR timestamp is older than 10 minutes
-
-### Processing Flow
-1. Monitor service fetches all appliances from external API
-2. Filters for stale appliances meeting remediation criteria
-3. Adds stale appliances to processing queue with duplicate prevention
-4. Processing service polls queue and handles appliances concurrently
-5. For each appliance: calls drain API → saves drain operation → calls remediate API → saves remediate operation
-6. Failed operations are retried automatically
-7. If operations fail all retries they will be removed from the working set and tried again during next fetch of stale appliances
-
-## Error Handling
-
-- API failures: Automatic retry with exponential backoff
-- Individual failures: Don't block processing of other appliances  
-- Queue overflow: Skips new items, retries in next monitoring cycle
-- Network issues: Application continues running and recovers when connectivity returns
-
 ## Testing
 
 The application includes comprehensive unit tests covering:
 - Business logic and stale detection
 - API client behavior and retry logic
-- Queue management and concurrency
+- Async processing and concurrency
 - Service integration and error handling
 
 Run tests with: `mvn test`
@@ -319,8 +291,7 @@ src/main/java/com/octtools/appliance/
 ├── repository/OperationRepository.java   # Database access
 └── service/                              # Business logic
     ├── ApplianceMonitorService.java      # Monitoring and detection
-    ├── RemediationProcessor.java         # Processing and remediation
-    └── RemediationQueue.java             # Queue management
+    └─── RemediationProcessor.java         # Processing and remediation
 ```
 
 ## Design Decisions
@@ -334,40 +305,34 @@ src/main/java/com/octtools/appliance/
 
 ### Why Separate Monitoring and Processing?
 - Ensures consistent 5-minute monitoring regardless of processing time
-- Better fault isolation - API issues don't delay monitoring cycles
+- Better fault isolation - processing issues don't delay monitoring cycles
 - Components can scale independently based on different needs
 
-### Why In-Memory Storage?
-- Assignment requirement: "doesn't need to survive restart"
-- Zero setup/configuration required
-- Appropriate for prototype/development scope
+### Why Immediate Async Processing Over Producer/Consumer?
+Initially considered a traditional producer/consumer pattern with a queue, but the external API's dataset volatility made this approach unsuitable:
+- Appliances exist in the external system for only 2-3 minutes
+- Must process within minutes of detection to avoid 404 errors
+- Even minimal queuing delays (100ms polling) caused appliances to disappear before processing
+- Direct async submission to bounded executor eliminates queue delays while maintaining thread safety and natural backpressure
 
-### Why WebClient Over RestTemplate?
-- RestTemplate is deprecated in favor of WebClient
-- Better performance with non-blocking I/O
-- Built-in retry support integration
-- Future-proof choice for Spring ecosystem
-
-### Why One-at-a-Time Processing?
-Initially considered batch processing, but one-at-a-time provides several advantages:
-- Natural backpressure, system self-regulates under load
-- Memory usage is bounded by thread pool + queue size
-- Slow APIs don't block entire batches
-
-### Why Bounded ThreadPoolExecutor?
-Chose bounded over unbounded to prevent memory issues:
-- Rejected tasks return to queue for retry
-- Maximum 60 concurrent operations (10 active + 50 queued)
-- System slows down rather than crashes under load
+### Why ThreadPoolExecutor vs Other Async Options?
+Chose ThreadPoolExecutor over alternatives for predictable resource management:
+- vs @Async: ThreadPoolExecutor provides explicit control over thread limits and queue size
+- vs CompletableFuture.runAsync(): Default ForkJoinPool is unbounded and could exhaust system resources
+- vs Reactive Streams: Added complexity not justified for this use case's straightforward processing needs
+- Result: Direct control over concurrency with bounded resources and graceful overflow handling
 
 ## Production Considerations
 
 For production deployment, consider:
-- Database persistence (PostgreSQL, MySQL) for operation history and survival of restarts
-- Monitoring and alerting for queue depth and failure rates
+- Database persistence (PostgreSQL, MySQL) for operation history
+- Monitoring and alerting for processing throughput and failure rates
 - Configuration externalization for different environments
 - Circuit breaker patterns for external API resilience
 - Metrics collection for operational visibility
+- Thread pool sizing based on actual load patterns and API latency
+- Rate limiting to prevent overwhelming external APIs
+- Distributed processing for horizontal scaling across multiple instances
 
 ## Known Limitations
 

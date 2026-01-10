@@ -58,10 +58,8 @@ public class ApplianceApiClient {
         }
     }
 
-    // Retry: 3 attempts, 1s delay, 2x multiplier (explicit configuration)
+    // Retry: 3 attempts, 1s delay, 2x multiplier (retry all exceptions for collection endpoint)
     @Retryable(
-            retryFor = {WebClientResponseException.class},
-            noRetryFor = {WebClientResponseException.NotFound.class},
             maxAttempts = MAX_RETRY_ATTEMPTS,
             backoff = @Backoff(delay = INITIAL_RETRY_DELAY_MS, multiplier = RETRY_BACKOFF_MULTIPLIER)
     )
@@ -109,9 +107,8 @@ public class ApplianceApiClient {
         }
     }
 
-    // Retry: 3 attempts, 1s delay, 2x multiplier (explicit configuration)
+    // Retry: 3 attempts, 1s delay, 2x multiplier (don't retry 404s)
     @Retryable(
-            retryFor = {WebClientResponseException.class},
             noRetryFor = {WebClientResponseException.NotFound.class},
             maxAttempts = MAX_RETRY_ATTEMPTS,
             backoff = @Backoff(delay = INITIAL_RETRY_DELAY_MS, multiplier = RETRY_BACKOFF_MULTIPLIER)
@@ -166,9 +163,8 @@ public class ApplianceApiClient {
         }
     }
 
-    // Retry: 3 attempts, 1s delay, 2x multiplier (explicit configuration)
+    // Retry: 3 attempts, 1s delay, 2x multiplier (don't retry 404s)
     @Retryable(
-            retryFor = {WebClientResponseException.class},
             noRetryFor = {WebClientResponseException.NotFound.class},
             maxAttempts = MAX_RETRY_ATTEMPTS,
             backoff = @Backoff(delay = INITIAL_RETRY_DELAY_MS, multiplier = RETRY_BACKOFF_MULTIPLIER)

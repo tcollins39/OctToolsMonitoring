@@ -2,7 +2,6 @@ package com.octtools.appliance.controller;
 
 import com.octtools.appliance.model.Operation;
 import com.octtools.appliance.repository.OperationRepository;
-import com.octtools.appliance.service.RemediationQueue;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;

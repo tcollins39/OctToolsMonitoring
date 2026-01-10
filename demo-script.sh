@@ -76,7 +76,7 @@ show_service_info() {
     echo "   Health Endpoint: $BASE_URL/actuator/health"
     echo "   Operations API:  $API_URL/operations"
     echo "   Monitoring:      Every 5 minutes"
-    echo "   Processing:      Every 100ms"
+    echo "   Processing:      Immediate async processing"
     echo
     echo "Current Status:"
     health_status=$(curl -s "$BASE_URL/actuator/health" | jq -r '.status' 2>/dev/null || echo "UNKNOWN")

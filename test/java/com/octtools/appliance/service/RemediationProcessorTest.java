@@ -24,9 +24,6 @@ import static org.mockito.Mockito.*;
 class RemediationProcessorTest {
 
     @Mock
-    private RemediationQueue remediationQueue;
-    
-    @Mock
     private ApplianceApiClient apiClient;
     
     @Mock
@@ -36,39 +33,29 @@ class RemediationProcessorTest {
     
     @BeforeEach
     void setUp() {
-        processor = new RemediationProcessor(apiClient, remediationQueue, operationRepository, 2, TEST_EMAIL);
+        processor = new RemediationProcessor(apiClient, operationRepository, 2, TEST_EMAIL);
     }
     
     @Test
     void constructor_validatesInputs() {
         assertThrows(IllegalArgumentException.class, 
-            () -> new RemediationProcessor(apiClient, remediationQueue, operationRepository, 0, TEST_EMAIL));
+            () -> new RemediationProcessor(apiClient, operationRepository, 0, TEST_EMAIL));
             
         assertThrows(IllegalArgumentException.class,
-            () -> new RemediationProcessor(apiClient, remediationQueue, operationRepository, 2, null));
+            () -> new RemediationProcessor(apiClient, operationRepository, 2, null));
     }
 
     @Test
-    void processRemediationQueue_handlesEmptyQueue() {
-        when(remediationQueue.pollOne()).thenReturn(null);
-        
-        processor.processRemediationQueue();
-        
-        verify(remediationQueue).pollOne();
-        verifyNoInteractions(apiClient);
-        verifyNoInteractions(operationRepository);
-    }
-
-    @Test
-    void processRemediationQueue_processesAppliances() {
+    void processAppliance_successfullyProcessesAppliance() throws InterruptedException {
         Appliance appliance = new Appliance(TEST_APPLIANCE_ID, LIVE_STATUS, null);
-        when(remediationQueue.pollOne()).thenReturn(appliance);
         when(apiClient.drainAppliance(anyString())).thenReturn(new DrainResponse(DRAIN_ID, ESTIMATED_TIME));
         when(apiClient.remediateAppliance(anyString())).thenReturn(new RemediateResponse(REMEDIATION_ID, REMEDIATION_RESULT));
         
-        processor.processRemediationQueue();
+        processor.processAppliance(appliance);
         
-        verify(remediationQueue).pollOne();
+        // Allow async processing to complete
+        Thread.sleep(200);
+        
         verify(apiClient).drainAppliance(TEST_APPLIANCE_ID);
         verify(apiClient).remediateAppliance(TEST_APPLIANCE_ID);
         
@@ -94,36 +81,31 @@ class RemediationProcessorTest {
     }
 
     @Test
-    void processRemediationQueue_drainFailsAfterRetries_noRemediateCall() {
+    void processAppliance_drainFailsAfterRetries_noRemediateCall() throws InterruptedException {
         Appliance appliance = new Appliance(TEST_APPLIANCE_ID, LIVE_STATUS, null);
-        when(remediationQueue.pollOne()).thenReturn(appliance);
         when(apiClient.drainAppliance(anyString())).thenThrow(new RuntimeException("Drain failed after retries"));
         
-        processor.processRemediationQueue();
+        processor.processAppliance(appliance);
         
-        // Give async processing time to complete
-        try { Thread.sleep(100); } catch (InterruptedException e) {}
+        // Allow async processing to complete
+        Thread.sleep(200);
         
-        verify(remediationQueue).pollOne();
         verify(apiClient).drainAppliance(TEST_APPLIANCE_ID);
         verify(apiClient, never()).remediateAppliance(anyString());
         verify(operationRepository, never()).save(any());
-        verify(remediationQueue).markCompleted(TEST_APPLIANCE_ID);
     }
 
     @Test
-    void processRemediationQueue_drainSucceedsRemediateFails_onlyDrainOperationSaved() {
+    void processAppliance_drainSucceedsRemediateFails_onlyDrainOperationSaved() throws InterruptedException {
         Appliance appliance = new Appliance(TEST_APPLIANCE_ID, LIVE_STATUS, null);
-        when(remediationQueue.pollOne()).thenReturn(appliance);
         when(apiClient.drainAppliance(anyString())).thenReturn(new DrainResponse(DRAIN_ID, ESTIMATED_TIME));
         when(apiClient.remediateAppliance(anyString())).thenThrow(new RuntimeException("Remediate failed after retries"));
         
-        processor.processRemediationQueue();
+        processor.processAppliance(appliance);
         
-        // Give async processing time to complete
-        try { Thread.sleep(100); } catch (InterruptedException e) {}
+        // Allow async processing to complete
+        Thread.sleep(200);
         
-        verify(remediationQueue).pollOne();
         verify(apiClient).drainAppliance(TEST_APPLIANCE_ID);
         verify(apiClient).remediateAppliance(TEST_APPLIANCE_ID);
         
@@ -135,53 +117,5 @@ class RemediationProcessorTest {
         assertEquals(TEST_APPLIANCE_ID, drainOp.getApplianceId());
         assertEquals(DRAIN_OPERATION_TYPE, drainOp.getOperationType());
         assertEquals(DRAIN_ID, drainOp.getDrainId());
-        
-        verify(remediationQueue).markCompleted(TEST_APPLIANCE_ID);
-    }
-
-    @Test
-    void processRemediationQueue_singleApplianceProcessing() throws InterruptedException {
-        Appliance appliance = new Appliance(TEST_APPLIANCE_ID, LIVE_STATUS, null);
-        when(remediationQueue.pollOne()).thenReturn(appliance);
-        when(apiClient.drainAppliance(anyString())).thenReturn(new DrainResponse(DRAIN_ID, ESTIMATED_TIME));
-        when(apiClient.remediateAppliance(anyString())).thenReturn(new RemediateResponse(REMEDIATION_ID, REMEDIATION_RESULT));
-        
-        processor.processRemediationQueue();
-        
-        // Allow async processing to complete
-        Thread.sleep(100);
-        
-        verify(remediationQueue).pollOne();
-        verify(apiClient).drainAppliance(TEST_APPLIANCE_ID);
-        verify(apiClient).remediateAppliance(TEST_APPLIANCE_ID);
-        verify(operationRepository, times(2)).save(any()); // 2 operations per appliance
-        verify(remediationQueue).markCompleted(TEST_APPLIANCE_ID);
-    }
-
-    @Test
-    void processRemediationQueue_executorQueueFull_requeuesAppliance() {
-        // Create processor with queue size 0 to force immediate rejection
-        RemediationProcessor processorWithFullQueue = new RemediationProcessor(
-            apiClient, remediationQueue, operationRepository, 1, TEST_EMAIL) {
-            @Override
-            public void processRemediationQueue() {
-                Appliance appliance = remediationQueue.pollOne();
-                if (appliance == null) return;
-                
-                // Simulate RejectedExecutionException by calling the catch block directly
-                remediationQueue.markCompleted(appliance.getId());
-                remediationQueue.addAppliances(java.util.Collections.singletonList(appliance));
-            }
-        };
-        
-        Appliance appliance = new Appliance(TEST_APPLIANCE_ID, LIVE_STATUS, null);
-        when(remediationQueue.pollOne()).thenReturn(appliance);
-        
-        processorWithFullQueue.processRemediationQueue();
-        
-        verify(remediationQueue).pollOne();
-        verify(remediationQueue).markCompleted(TEST_APPLIANCE_ID);
-        verify(remediationQueue).addAppliances(java.util.Collections.singletonList(appliance));
-        verifyNoInteractions(apiClient); // Should not process when re-queued
     }
 }

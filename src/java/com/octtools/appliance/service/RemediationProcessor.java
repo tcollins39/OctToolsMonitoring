@@ -65,6 +65,7 @@ public class RemediationProcessor {
             processingExecutor.submit(() -> processApplianceInternal(appliance));
         } catch (RejectedExecutionException e) {
             log.warn("Executor queue full, skipping appliance {} - will retry next cycle", appliance.getId());
+            log.debug("METRIC: appliance.processing.queue_full.count=1");
         }
     }
 
@@ -84,9 +85,10 @@ public class RemediationProcessor {
             log.info("Successfully processed appliance {}: drain={}, remediation={}", 
                     applianceId, drainResponse.getDrainId(), remediateResponse.getRemediationId());
             
-            log.info("METRIC: appliance.processing.success.count=1");
+            log.debug("METRIC: appliance.processing.success.ratio=1");
         } catch (Exception e) {
             log.error("Failed to process appliance {}: {}", applianceId, e.getMessage());
+            log.debug("METRIC: appliance.processing.success.ratio=0");
         }
     }
 

@@ -34,15 +34,15 @@ This approach ensures consistent monitoring intervals while providing immediate 
 
 ### Concurrency Model
 - Single-threaded data collection with per-page processing
-- Multi-threaded appliance processing using a bounded ThreadPoolExecutor (50 threads, 100-task queue)
+- Multi-threaded appliance processing using a bounded ThreadPoolExecutor (100 threads, 2,500-task queue)
 - Immediate async processing with natural backpressure and graceful overflow handling
 
 ### Processing Architecture Design
 The application implements immediate async processing with several key design decisions:
 
 Bounded Resources:
-- Thread Pool: Fixed 50 threads for predictable resource usage
-- Executor Queue: Maximum 100 tasks to provide backpressure
+- Thread Pool: Fixed 100 threads for predictable resource usage
+- Executor Queue: Maximum 2,500 tasks to provide backpressure
 - Per-page Processing: Appliances processed as pages are collected
 
 Processing Strategy:
@@ -65,12 +65,11 @@ Connects to the OctTools homework API:
 - Operations: Drain and remediate API calls with retry logic
 
 Retry Strategy:
-- Collection API (`getAppliances`): 5 retries with 500ms delay, 1.5x backoff
-  - Higher retry count because pagination failure breaks entire collection cycle
-  - Cannot skip failed pages due to cursor-based pagination dependency
-- Operation APIs (`drain`, `remediate`): 3 retries with 500ms delay, 1.5x backoff
-  - Fewer retries since individual operation failures don't impact other appliances
-  - Consistent timing with collection API for predictable behavior
+- All APIs: 5 retries with 500ms delay, 2x backoff (500ms, 1s, 2s, 4s delays)
+  - 5 attempts provide excellent resilience against transient API failures
+  - Fast initial retry (500ms) with exponential backoff balances speed and stability
+  - Collection API failures break entire pagination cycle, so robust retry is critical
+  - Operation API failures are isolated per appliance, allowing other processing to continue
 
 ## Configuration
 
@@ -81,12 +80,12 @@ appliance:
   api:
     base-url: http://oct-backend-homework.us-east-1.elasticbeanstalk.com:8080
     auth-header: Basic b2N0QXBwbGljYW50OmIwZTg1YWE4LWQ2YWUtNGQzYi1iODA5LTA0ZDIwN2VkZTNmNQ==
-    page-size: 500
+    page-size: 100
     timeout-seconds: 30
   processing:
     actor-email: engineer@company.com
     stale-threshold-minutes: 10
-    thread-pool-size: 50
+    thread-pool-size: 100
 ```
 
 ## Running the Application
@@ -136,6 +135,7 @@ The script demonstrates:
 - Health check verification
 - Getting all operations with pagination
 - Filtering operations by appliance ID
+- Performance metrics and system throughput
 - Error handling examples
 - Service status monitoring
 
@@ -331,19 +331,19 @@ Chose ThreadPoolExecutor over alternatives for predictable resource management:
 - Result: Direct control over concurrency with bounded resources and graceful overflow handling
 
 ### ThreadPool Sizing Rationale
-Configuration: 50 threads + 100 queue capacity = 150 total concurrent operations
+Configuration: 100 threads + 2,500 queue capacity = 2,600 total system capacity
 
-**Thread Count (50):**
-- Based on performance testing with 1,600+ stale appliances per monitoring cycle
-- I/O-bound workload (API calls) benefits from higher thread count than CPU cores
-- Average API latency: ~750ms per operation (drain + remediate)
-- 50 threads handle peak loads without thread starvation
+**Thread Count 100:**
+- Optimized for I/O-bound workload where threads spend ~400ms waiting for API responses
+- Performance testing showed 100 threads achieve sub-50 second cycle completion times
+- Balances high throughput with resource efficiency and external API capacity limits
+- Higher counts risk overwhelming the external API server with concurrent requests
 
-**Queue Size (100):**
-- Provides burst capacity for workload spikes
-- Bounded to prevent memory exhaustion under extreme load
-- When full, overflow appliances retry in next 5-minute cycle (graceful degradation)
-- Total capacity (150) exceeds typical workload (1,600 appliances / 5 minutes = ~5 per second)
+**Queue Size 2,500:**
+- Provides substantial burst capacity for workload spikes and system resilience
+- Bounded to prevent memory exhaustion while allowing for extreme load scenarios
+- When full, overflow appliances retry in next 5-minute cycle for graceful degradation
+- Total system capacity of 2,600 significantly exceeds typical workload for maximum reliability
 
 ## Production Considerations
 

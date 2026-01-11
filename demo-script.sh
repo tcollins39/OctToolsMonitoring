@@ -69,10 +69,59 @@ get_operations_by_appliance() {
     fi
 }
 
+# Function to show performance metrics
+show_performance_metrics() {
+    echo
+    echo "5. Performance Metrics:"
+    LOG_FILE="app_latest.log"
+    
+    if [ -f "$LOG_FILE" ]; then
+        # Throughput calculations
+        total_processed=$(grep "Successfully processed appliance" "$LOG_FILE" | wc -l | tr -d ' ')
+        completed_cycles=$(grep "Collection cycle completed" "$LOG_FILE" | wc -l | tr -d ' ')
+        
+        echo "   Throughput:"
+        echo "     - Total Processed: $total_processed appliances"
+        echo "     - Completed Cycles: $completed_cycles"
+        
+        if [ "$completed_cycles" -gt 0 ]; then
+            avg_cycle_time=$(grep "Collection cycle completed.*took.*ms" "$LOG_FILE" | \
+                awk -F'took ' '{print $2}' | awk -F'ms' '{sum+=$1; count++} END {printf "%.1f", sum/count/1000}')
+            echo "     - Average Cycle Time: ${avg_cycle_time}s"
+        fi
+        
+        # Success rates
+        successful=$(grep "Successfully processed appliance" "$LOG_FILE" | wc -l | tr -d ' ')
+        failed=$(grep "Failed to process appliance" "$LOG_FILE" | wc -l | tr -d ' ')
+        total_processing=$((successful + failed))
+        
+        if [ "$total_processing" -gt 0 ]; then
+            processing_success_rate=$(echo "scale=1; $successful * 100 / $total_processing" | bc -l 2>/dev/null || echo "100")
+            echo "   Success Rates:"
+            echo "     - Processing Success: ${processing_success_rate}% ($successful/$total_processing)"
+        fi
+        
+        # API latency
+        avg_get_latency=$(grep "api.get_appliances.latency.ms" "$LOG_FILE" | \
+            awk -F'=' '{sum+=$2; count++} END {if(count>0) printf "%.0f", sum/count; else print "N/A"}')
+        avg_drain_latency=$(grep "api.drain_appliance.latency.ms" "$LOG_FILE" | \
+            awk -F'=' '{sum+=$2; count++} END {if(count>0) printf "%.0f", sum/count; else print "N/A"}')
+        avg_remediate_latency=$(grep "api.remediate_appliance.latency.ms" "$LOG_FILE" | \
+            awk -F'=' '{sum+=$2; count++} END {if(count>0) printf "%.0f", sum/count; else print "N/A"}')
+        
+        echo "   Average Latency:"
+        echo "     - Get Appliances: ${avg_get_latency}ms"
+        echo "     - Drain Operations: ${avg_drain_latency}ms"
+        echo "     - Remediate Operations: ${avg_remediate_latency}ms"
+    else
+        echo "   Log file not found - start application to see metrics"
+    fi
+}
+
 # Function to show service status and metrics
 show_service_info() {
     echo
-    echo "5. Service Information:"
+    echo "6. Service Information:"
     echo "   Health Endpoint: $BASE_URL/actuator/health"
     echo "   Operations API:  $API_URL/operations"
     echo "   Monitoring:      Every 5 minutes"
@@ -86,23 +135,14 @@ show_service_info() {
     echo "   Total Operations: $total_ops"
 }
 
-# Function to demonstrate error handling
-demonstrate_error_handling() {
-    echo
-    echo "6. Demonstrating error handling..."
-    echo "   Testing invalid endpoint:"
-    curl -s "$API_URL/invalid-endpoint" | head -c 200
-    echo
-}
-
 # Main execution
 main() {
     check_service
     get_all_operations
     get_operations_paginated
     get_operations_by_appliance
+    show_performance_metrics
     show_service_info
-    demonstrate_error_handling
     
     echo
     echo "=== Demo Complete ==="

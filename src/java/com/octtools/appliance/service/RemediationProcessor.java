@@ -24,6 +24,10 @@ import static com.octtools.appliance.config.ConfigProperties.PROCESSING_ACTOR_EM
 @Service
 @Slf4j
 public class RemediationProcessor {
+    
+    // Processing Configuration Constants
+    private static final int PROCESSING_QUEUE_SIZE = 2500;
+    
     private final ApplianceApiClient apiClient;
     private final OperationRepository operationRepository;
     private final ExecutorService processingExecutor;
@@ -43,7 +47,7 @@ public class RemediationProcessor {
             threadPoolSize, 
             0L, 
             TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(2500),
+            new ArrayBlockingQueue<>(PROCESSING_QUEUE_SIZE),
             new ThreadPoolExecutor.AbortPolicy()
         );
         

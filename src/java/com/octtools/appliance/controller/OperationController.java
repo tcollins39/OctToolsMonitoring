@@ -18,6 +18,9 @@ import java.util.Optional;
 @RequestMapping("/api/v1")
 public class OperationController {
     
+    // API Constants
+    private static final int MAX_PAGE_SIZE = 100;
+    
     private final OperationRepository operationRepository;
 
     public OperationController(OperationRepository operationRepository) {
@@ -39,7 +42,7 @@ public class OperationController {
         }
         
         // Limit page size to prevent performance issues and potential abuse
-        int limitedSize = Math.min(size, 100);
+        int limitedSize = Math.min(size, MAX_PAGE_SIZE);
         Pageable pageable = PageRequest.of(page, limitedSize);
         
         if (applianceId != null && !applianceId.trim().isEmpty()) {

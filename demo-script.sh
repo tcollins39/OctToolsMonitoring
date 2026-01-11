@@ -73,7 +73,7 @@ get_operations_by_appliance() {
 show_performance_metrics() {
     echo
     echo "5. Performance Metrics:"
-    LOG_FILE="app_latest.log"
+    LOG_FILE="appliance-monitor.log"
     
     if [ -f "$LOG_FILE" ]; then
         # Throughput calculations

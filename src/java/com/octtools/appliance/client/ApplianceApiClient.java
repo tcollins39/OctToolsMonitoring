@@ -25,8 +25,8 @@ public class ApplianceApiClient {
 
     // Retry configuration: Explicit values for clarity and control
     private static final int MAX_RETRY_ATTEMPTS = 5;
-    private static final long INITIAL_RETRY_DELAY_MS = 500; // Start with 500ms delay
-    private static final int RETRY_BACKOFF_MULTIPLIER = 2; // Double delay each retry (500ms, 1s, 2s, 4s)
+    private static final long INITIAL_RETRY_DELAY_MS = 1000; // Start with 1000ms delay
+    private static final int RETRY_BACKOFF_MULTIPLIER = 2; // Double delay each retry (1s, 2s, 4s, 8s)
 
     private final WebClient webClient;
     private final String actorEmail;

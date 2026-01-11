@@ -3,11 +3,11 @@ appliance:
     base-url: http://oct-backend-homework.us-east-1.elasticbeanstalk.com:8080
     auth-header: Basic b2N0QXBwbGljYW50OmIwZTg1YWE4LWQ2YWUtNGQzYi1iODA5LTA0ZDIwN2VkZTNmNQ==
     page-size: 100
-    timeout-seconds: 30
+    timeout-seconds: 5
   processing:
     actor-email: engineer@company.com
     stale-threshold-minutes: 10
-    thread-pool-size: 100
+    thread-pool-size: 75
 
 spring:
   datasource:

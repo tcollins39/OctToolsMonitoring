@@ -34,14 +34,14 @@ This approach ensures consistent monitoring intervals while providing immediate 
 
 ### Concurrency Model
 - Single-threaded data collection with per-page processing
-- Multi-threaded appliance processing using a bounded ThreadPoolExecutor (100 threads, 2,500-task queue)
+- Multi-threaded appliance processing using a bounded ThreadPoolExecutor (75 threads, 2,500-task queue)
 - Immediate async processing with natural backpressure and graceful overflow handling
 
 ### Processing Architecture Design
 The application implements immediate async processing with several key design decisions:
 
 Bounded Resources:
-- Thread Pool: Fixed 100 threads for predictable resource usage
+- Thread Pool: Fixed 75 threads for predictable resource usage
 - Executor Queue: Maximum 2,500 tasks to provide backpressure
 - Per-page Processing: Appliances processed as pages are collected
 
@@ -65,9 +65,9 @@ Connects to the OctTools homework API:
 - Operations: Drain and remediate API calls with retry logic
 
 Retry Strategy:
-- All APIs: 5 retries with 500ms delay, 2x backoff (500ms, 1s, 2s, 4s delays)
+- All APIs: 5 retries with 1000ms delay, 2x backoff (1s, 2s, 4s, 8s delays)
   - 5 attempts provide excellent resilience against transient API failures
-  - Fast initial retry (500ms) with exponential backoff balances speed and stability
+  - Conservative initial retry (1000ms) with exponential backoff balances stability and recovery speed
   - Collection API failures break entire pagination cycle, so robust retry is critical
   - Operation API failures are isolated per appliance, allowing other processing to continue
 
@@ -85,7 +85,7 @@ appliance:
   processing:
     actor-email: engineer@company.com
     stale-threshold-minutes: 10
-    thread-pool-size: 100
+    thread-pool-size: 75
 ```
 
 ## Running the Application
@@ -331,11 +331,11 @@ Chose ThreadPoolExecutor over alternatives for predictable resource management:
 - Result: Direct control over concurrency with bounded resources and graceful overflow handling
 
 ### ThreadPool Sizing Rationale
-Configuration: 100 threads + 2,500 queue capacity = 2,600 total system capacity
+Configuration: 75 threads + 2,500 queue capacity = 2,575 total system capacity
 
-**Thread Count 100:**
+**Thread Count 75:**
 - Optimized for I/O-bound workload where threads spend ~400ms waiting for API responses
-- Performance testing showed 100 threads achieve sub-50 second cycle completion times
+- Performance testing showed 75 threads provide optimal balance of throughput and system stability
 - Balances high throughput with resource efficiency and external API capacity limits
 - Higher counts risk overwhelming the external API server with concurrent requests
 

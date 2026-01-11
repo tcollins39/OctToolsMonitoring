@@ -30,7 +30,17 @@ public class OperationController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String applianceId) {
         
-        Pageable pageable = PageRequest.of(page, size);
+        // Validate input parameters
+        if (page < 0) {
+            throw new IllegalArgumentException("Page number cannot be negative");
+        }
+        if (size <= 0) {
+            throw new IllegalArgumentException("Page size must be positive");
+        }
+        
+        // Limit page size to prevent performance issues and potential abuse
+        int limitedSize = Math.min(size, 100);
+        Pageable pageable = PageRequest.of(page, limitedSize);
         
         if (applianceId != null && !applianceId.trim().isEmpty()) {
             return operationRepository.findByApplianceIdOrderByProcessedAtDesc(applianceId.trim(), pageable);
@@ -41,6 +51,11 @@ public class OperationController {
 
     @GetMapping("/operations/{id}")
     public ResponseEntity<Operation> getOperation(@PathVariable Long id) {
+        // Validate path parameter
+        if (id == null || id <= 0) {
+            return ResponseEntity.badRequest().build();
+        }
+        
         Optional<Operation> operation = operationRepository.findById(id);
         return operation.map(ResponseEntity::ok)
                       .orElse(ResponseEntity.notFound().build());

@@ -25,7 +25,6 @@ import static com.octtools.appliance.config.ConfigProperties.PROCESSING_ACTOR_EM
 @Slf4j
 public class RemediationProcessor {
     
-    // Processing Configuration Constants
     private static final int PROCESSING_QUEUE_SIZE = 2500;
     private static final String OPERATION_TYPE_DRAIN = "DRAIN";
     private static final String OPERATION_TYPE_REMEDIATE = "REMEDIATE";

@@ -23,12 +23,11 @@ import static com.octtools.appliance.config.ConfigProperties.PROCESSING_ACTOR_EM
 @Slf4j
 public class ApplianceApiClient {
 
-    // Retry configuration: Different strategies for different operations
     private static final int MAX_RETRY_ATTEMPTS = 5;
-    private static final long COLLECTION_RETRY_DELAY_MS = 500;  // Collection: 0.5s initial delay
-    private static final long PROCESSING_RETRY_DELAY_MS = 500;  // Processing: 0.5s initial delay
-    private static final double COLLECTION_BACKOFF_MULTIPLIER = 1.5; // Collection (0.5s, 0.75s, 1.13s, 1.69s, 2.53s)
-    private static final double PROCESSING_BACKOFF_MULTIPLIER = 1.1; // Processing (0.5s, 0.55s, 0.61s, 0.67s, 0.73s)
+    private static final long COLLECTION_RETRY_DELAY_MS = 500;
+    private static final long PROCESSING_RETRY_DELAY_MS = 500;
+    private static final double COLLECTION_BACKOFF_MULTIPLIER = 1.5;
+    private static final double PROCESSING_BACKOFF_MULTIPLIER = 1.1;
 
     private final WebClient webClient;
     private final String actorEmail;

@@ -20,7 +20,6 @@ import static com.octtools.appliance.config.ConfigProperties.PROCESSING_STALE_TH
 @Slf4j
 public class ApplianceMonitorService {
     
-    // Monitor appliances every 5 minutes as per requirements
     private static final int MONITORING_INTERVAL_MS = 300000;
     
     private static final String LIVE_STATUS = "LIVE";

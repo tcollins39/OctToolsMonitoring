@@ -88,15 +88,29 @@ appliance:
 ## Running the Application
 
 ### Prerequisites
-- Java 17+
+- **Java 17** (required - newer versions may cause compilation issues)
 - Maven 3.6+
+
+**Note**: If you have multiple Java versions installed, ensure Java 17 is active:
+```bash
+# Check current Java version
+java -version
+
+# If encountering compilation errors with newer Java versions, set Java 17:
+export JAVA_HOME=/path/to/java-17    # Mac/Linux
+set JAVA_HOME=C:\path\to\java-17      # Windows CMD
+$env:JAVA_HOME="C:\path\to\java-17"   # Windows PowerShell
+
+# Or run directly with Java 17:
+JAVA_HOME=/path/to/java-17 mvn spring-boot:run  # Mac/Linux
+```
 
 ### Quick Start
 ```bash
 # Option 1: Run with Maven
 mvn spring-boot:run
 
-# Option 3: Build and run JAR
+# Option 2: Build and run JAR
 mvn clean package
 java -jar target/appliance-monitor-1.0.0.jar
 ```

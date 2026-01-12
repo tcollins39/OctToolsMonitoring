@@ -80,7 +80,7 @@ public class ApplianceMonitorService {
             Duration elapsed = Duration.between(startTime, Instant.now());
             log.error("Collection cycle failed after {}ms", elapsed.toMillis(), e);
             log.debug("METRIC: collection.success.ratio=0");
-            log.info("METRIC: collection.failures.count=1");
+            log.debug("METRIC: collection.failures.count=1");
         }
     }
 

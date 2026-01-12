@@ -33,16 +33,13 @@ class RemediationProcessorTest {
     
     @BeforeEach
     void setUp() {
-        processor = new RemediationProcessor(apiClient, operationRepository, 2, TEST_EMAIL);
+        processor = new RemediationProcessor(apiClient, operationRepository, 2);
     }
     
     @Test
     void constructor_validatesInputs() {
         assertThrows(IllegalArgumentException.class, 
-            () -> new RemediationProcessor(apiClient, operationRepository, 0, TEST_EMAIL));
-            
-        assertThrows(IllegalArgumentException.class,
-            () -> new RemediationProcessor(apiClient, operationRepository, 2, null));
+            () -> new RemediationProcessor(apiClient, operationRepository, 0));
     }
 
     @Test

@@ -19,7 +19,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static com.octtools.appliance.config.ConfigProperties.PROCESSING_THREAD_POOL_SIZE;
-import static com.octtools.appliance.config.ConfigProperties.PROCESSING_ACTOR_EMAIL;
 
 @Service
 @Slf4j
@@ -36,10 +35,9 @@ public class RemediationProcessor {
     public RemediationProcessor(
             ApplianceApiClient apiClient,
             OperationRepository operationRepository,
-            @Value(PROCESSING_THREAD_POOL_SIZE) int threadPoolSize,
-            @Value(PROCESSING_ACTOR_EMAIL) String actorEmail) {
+            @Value(PROCESSING_THREAD_POOL_SIZE) int threadPoolSize) {
         
-        validateInputs(threadPoolSize, actorEmail);
+        validateInputs(threadPoolSize);
         
         this.apiClient = apiClient;
         this.operationRepository = operationRepository;
@@ -52,16 +50,12 @@ public class RemediationProcessor {
             new ThreadPoolExecutor.AbortPolicy()
         );
         
-        log.info("Initialized RemediationProcessor with threadPoolSize={}, actor={}", 
-                threadPoolSize, actorEmail);
+        log.info("Initialized RemediationProcessor with threadPoolSize={}", threadPoolSize);
     }
 
-    private void validateInputs(int threadPoolSize, String actorEmail) {
+    private void validateInputs(int threadPoolSize) {
         if (threadPoolSize <= 0) {
             throw new IllegalArgumentException("Thread pool size must be positive, got: " + threadPoolSize);
-        }
-        if (actorEmail == null || actorEmail.trim().isEmpty()) {
-            throw new IllegalArgumentException("Actor email cannot be null or empty");
         }
     }
 

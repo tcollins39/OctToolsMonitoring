@@ -35,7 +35,7 @@ This approach ensures consistent monitoring intervals while providing immediate 
 
 ### Concurrency Model
 - Single-threaded data collection with per-page processing
-- Multi-threaded appliance processing using a bounded ThreadPoolExecutor with100 threads and 2,500-task queue
+- Multi-threaded appliance processing using a bounded ThreadPoolExecutor with 100 threads and 2,500-task queue
 - Immediate async processing with natural backpressure and graceful overflow handling
 
 ### Processing Architecture Design
@@ -55,7 +55,7 @@ This architecture provides high throughput while maintaining bounded memory usag
 
 ### External API Integration
 Connects to the OctTools homework API:
-- Base URL: `oct-backend-homework.us-east-1.elasticbeanstalk.com`
+- Base URL: `http://oct-backend-homework.us-east-1.elasticbeanstalk.com:8080`
 - Basic auth is configured in application.yml
 - Cursor-based pagination for fetching all appliances
 - Drain and remediate API calls with retry logic

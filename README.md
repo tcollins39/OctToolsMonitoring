@@ -97,12 +97,13 @@ appliance:
 java -version
 
 # If encountering compilation errors with newer Java versions, set Java 17:
-export JAVA_HOME=/path/to/java-17    # Mac/Linux
-set JAVA_HOME=C:\path\to\java-17      # Windows CMD
-$env:JAVA_HOME="C:\path\to\java-17"   # Windows PowerShell
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk    # Linux
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/amazon-corretto-17.jdk/Contents/Home  # Mac
+set JAVA_HOME=C:\Program Files\Amazon Corretto\jdk17.0.16_8      # Windows CMD
+$env:JAVA_HOME="C:\Program Files\Amazon Corretto\jdk17.0.16_8"   # Windows PowerShell
 
 # Or run directly with Java 17:
-JAVA_HOME=/path/to/java-17 mvn spring-boot:run  # Mac/Linux
+JAVA_HOME=/Library/Java/JavaVirtualMachines/amazon-corretto-17.jdk/Contents/Home mvn spring-boot:run  # Mac/Linux
 ```
 
 ### Quick Start

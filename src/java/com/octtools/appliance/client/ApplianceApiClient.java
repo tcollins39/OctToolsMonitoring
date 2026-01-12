@@ -23,10 +23,12 @@ import static com.octtools.appliance.config.ConfigProperties.PROCESSING_ACTOR_EM
 @Slf4j
 public class ApplianceApiClient {
 
-    // Retry configuration: Explicit values for clarity and control
+    // Retry configuration: Different strategies for different operations
     private static final int MAX_RETRY_ATTEMPTS = 5;
-    private static final long INITIAL_RETRY_DELAY_MS = 1000; // Start with 1000ms delay
-    private static final int RETRY_BACKOFF_MULTIPLIER = 2; // Double delay each retry (1s, 2s, 4s, 8s)
+    private static final long COLLECTION_RETRY_DELAY_MS = 500;  // Collection: 0.5s initial delay
+    private static final long PROCESSING_RETRY_DELAY_MS = 500;  // Processing: 0.5s initial delay
+    private static final double COLLECTION_BACKOFF_MULTIPLIER = 1.5; // Collection (0.5s, 0.75s, 1.13s, 1.69s, 2.53s)
+    private static final double PROCESSING_BACKOFF_MULTIPLIER = 1.1; // Processing (0.5s, 0.55s, 0.61s, 0.67s, 0.73s)
 
     private final WebClient webClient;
     private final String actorEmail;
@@ -58,10 +60,10 @@ public class ApplianceApiClient {
         }
     }
 
-    // Retry: 3 attempts, 1s delay, 2x multiplier (retry all exceptions for collection endpoint)
+    // Retry: 5 attempts, 0.5s delay, 1.5x multiplier (retry all exceptions for collection endpoint)
     @Retryable(
             maxAttempts = MAX_RETRY_ATTEMPTS,
-            backoff = @Backoff(delay = INITIAL_RETRY_DELAY_MS, multiplier = RETRY_BACKOFF_MULTIPLIER)
+            backoff = @Backoff(delay = COLLECTION_RETRY_DELAY_MS, multiplier = COLLECTION_BACKOFF_MULTIPLIER)
     )
     public AppliancePageResponse getAppliances(String after, int pageSize) {
         Instant startTime = Instant.now();
@@ -89,8 +91,8 @@ public class ApplianceApiClient {
                     response != null && response.getData() != null ? response.getData().size() : 0, latencyMs);
 
             // Emit API metrics
-            log.info("METRIC: api.get_appliances.latency.ms={}", latencyMs);
-            log.info("METRIC: api.get_appliances.success.ratio=1");
+            log.debug("METRIC: api.get_appliances.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.get_appliances.success.ratio=1");
 
             return response;
 
@@ -99,19 +101,19 @@ public class ApplianceApiClient {
             log.warn("Failed to fetch appliances (attempt will retry): status={}, response={}", e.getStatusCode(), e.getResponseBodyAsString());
 
             // Emit API metrics
-            log.info("METRIC: api.get_appliances.latency.ms={}", latencyMs);
-            log.info("METRIC: api.get_appliances.success.ratio=0");
-            log.info("METRIC: api.get_appliances.failure.count=1");
+            log.debug("METRIC: api.get_appliances.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.get_appliances.success.ratio=0");
+            log.debug("METRIC: api.get_appliances.failure.count=1");
 
             throw e;
         }
     }
 
-    // Retry: 3 attempts, 1s delay, 2x multiplier (don't retry 404s)
+    // Retry: 5 attempts, 0.5s delay, 1.1x multiplier (don't retry 404s)
     @Retryable(
             noRetryFor = {WebClientResponseException.NotFound.class},
             maxAttempts = MAX_RETRY_ATTEMPTS,
-            backoff = @Backoff(delay = INITIAL_RETRY_DELAY_MS, multiplier = RETRY_BACKOFF_MULTIPLIER)
+            backoff = @Backoff(delay = PROCESSING_RETRY_DELAY_MS, multiplier = PROCESSING_BACKOFF_MULTIPLIER)
     )
     public DrainResponse drainAppliance(String applianceId) {
         Instant startTime = Instant.now();
@@ -135,8 +137,8 @@ public class ApplianceApiClient {
                     response != null ? response.getDrainId() : null);
             
             // Emit API metrics
-            log.info("METRIC: api.drain_appliance.latency.ms={}", latencyMs);
-            log.info("METRIC: api.drain_appliance.success.ratio=1");
+            log.debug("METRIC: api.drain_appliance.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.drain_appliance.success.ratio=1");
             
             return response;
             
@@ -145,8 +147,8 @@ public class ApplianceApiClient {
             log.warn("Appliance {} no longer exists, skipping drain", applianceId);
             
             // Emit API metrics (404 is not a failure, it's expected)
-            log.info("METRIC: api.drain_appliance.latency.ms={}", latencyMs);
-            log.info("METRIC: api.drain_appliance.not_found.count=1");
+            log.debug("METRIC: api.drain_appliance.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.drain_appliance.not_found.count=1");
             
             throw e;
         } catch (WebClientResponseException e) {
@@ -155,19 +157,19 @@ public class ApplianceApiClient {
                     applianceId, e.getStatusCode(), e.getResponseBodyAsString());
             
             // Emit API metrics
-            log.info("METRIC: api.drain_appliance.latency.ms={}", latencyMs);
-            log.info("METRIC: api.drain_appliance.success.ratio=0");
-            log.info("METRIC: api.drain_appliance.failure.count=1");
+            log.debug("METRIC: api.drain_appliance.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.drain_appliance.success.ratio=0");
+            log.debug("METRIC: api.drain_appliance.failure.count=1");
             
             throw e;
         }
     }
 
-    // Retry: 3 attempts, 1s delay, 2x multiplier (don't retry 404s)
+    // Retry: 5 attempts, 0.5s delay, 1.1x multiplier (don't retry 404s)
     @Retryable(
             noRetryFor = {WebClientResponseException.NotFound.class},
             maxAttempts = MAX_RETRY_ATTEMPTS,
-            backoff = @Backoff(delay = INITIAL_RETRY_DELAY_MS, multiplier = RETRY_BACKOFF_MULTIPLIER)
+            backoff = @Backoff(delay = PROCESSING_RETRY_DELAY_MS, multiplier = PROCESSING_BACKOFF_MULTIPLIER)
     )
     public RemediateResponse remediateAppliance(String applianceId) {
         Instant startTime = Instant.now();
@@ -193,8 +195,8 @@ public class ApplianceApiClient {
                     response != null ? response.getRemediationResult() : null);
             
             // Emit API metrics
-            log.info("METRIC: api.remediate_appliance.latency.ms={}", latencyMs);
-            log.info("METRIC: api.remediate_appliance.success.ratio=1");
+            log.debug("METRIC: api.remediate_appliance.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.remediate_appliance.success.ratio=1");
             
             return response;
             
@@ -203,8 +205,8 @@ public class ApplianceApiClient {
             log.warn("Appliance {} no longer exists, skipping remediation", applianceId);
             
             // Emit API metrics (404 is not a failure, it's expected)
-            log.info("METRIC: api.remediate_appliance.latency.ms={}", latencyMs);
-            log.info("METRIC: api.remediate_appliance.not_found.count=1");
+            log.debug("METRIC: api.remediate_appliance.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.remediate_appliance.not_found.count=1");
             
             throw e;
         } catch (WebClientResponseException e) {
@@ -213,9 +215,9 @@ public class ApplianceApiClient {
                     applianceId, e.getStatusCode(), e.getResponseBodyAsString());
             
             // Emit API metrics
-            log.info("METRIC: api.remediate_appliance.latency.ms={}", latencyMs);
-            log.info("METRIC: api.remediate_appliance.success.ratio=0");
-            log.info("METRIC: api.remediate_appliance.failure.count=1");
+            log.debug("METRIC: api.remediate_appliance.latency.ms={}", latencyMs);
+            log.debug("METRIC: api.remediate_appliance.success.ratio=0");
+            log.debug("METRIC: api.remediate_appliance.failure.count=1");
             
             throw e;
         }

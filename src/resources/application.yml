@@ -7,7 +7,7 @@ appliance:
   processing:
     actor-email: engineer@company.com
     stale-threshold-minutes: 10
-    thread-pool-size: 75
+    thread-pool-size: 100
 
 spring:
   datasource:
@@ -26,7 +26,7 @@ spring:
 
 logging:
   level:
-    com.octtools.appliance: INFO
+    com.octtools.appliance: DEBUG
     org.springframework.retry: WARN
 
 management:

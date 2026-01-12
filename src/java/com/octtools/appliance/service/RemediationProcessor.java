@@ -27,6 +27,8 @@ public class RemediationProcessor {
     
     // Processing Configuration Constants
     private static final int PROCESSING_QUEUE_SIZE = 2500;
+    private static final String OPERATION_TYPE_DRAIN = "DRAIN";
+    private static final String OPERATION_TYPE_REMEDIATE = "REMEDIATE";
     
     private final ApplianceApiClient apiClient;
     private final OperationRepository operationRepository;
@@ -69,7 +71,7 @@ public class RemediationProcessor {
             processingExecutor.submit(() -> processApplianceInternal(appliance));
         } catch (RejectedExecutionException e) {
             log.warn("Executor queue full, skipping appliance {} - will retry next cycle", appliance.getId());
-            log.info("METRIC: appliance.processing.queue_full.count=1");
+            log.debug("METRIC: appliance.processing.queue_full.count=1");
         }
     }
 
@@ -89,10 +91,10 @@ public class RemediationProcessor {
             log.info("Successfully processed appliance {}: drain={}, remediation={}", 
                     applianceId, drainResponse.getDrainId(), remediateResponse.getRemediationId());
             
-            log.info("METRIC: appliance.processing.success.ratio=1");
+            log.debug("METRIC: appliance.processing.success.ratio=1");
         } catch (Exception e) {
             log.error("Failed to process appliance {}: {}", applianceId, e.getMessage());
-            log.info("METRIC: appliance.processing.success.ratio=0");
+            log.debug("METRIC: appliance.processing.success.ratio=0");
         }
     }
 
@@ -116,7 +118,7 @@ public class RemediationProcessor {
     private void recordDrainOperation(String applianceId, DrainResponse drainResponse) {
         Operation drainOperation = Operation.builder()
             .applianceId(applianceId)
-            .operationType("DRAIN")
+            .operationType(OPERATION_TYPE_DRAIN)
             .processedAt(Instant.now())
             .drainId(drainResponse.getDrainId())
             .estimatedTimeToDrain(drainResponse.getEstimatedTimeToDrain())
@@ -127,7 +129,7 @@ public class RemediationProcessor {
     private void recordRemediateOperation(String applianceId, RemediateResponse remediateResponse) {
         Operation remediateOperation = Operation.builder()
             .applianceId(applianceId)
-            .operationType("REMEDIATE")
+            .operationType(OPERATION_TYPE_REMEDIATE)
             .processedAt(Instant.now())
             .remediationId(remediateResponse.getRemediationId())
             .remediationResult(remediateResponse.getRemediationResult())

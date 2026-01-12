@@ -4,7 +4,8 @@ A Spring Boot application that monitors appliances for stale status and automati
 
 ## Overview
 
-This service connects to the OctTools external API to monitor appliances. When it finds appliances that haven't been heard from in over 10 minutes (and are still marked as "LIVE"), it automatically drains and remediates them. All operations are recorded and can be queried via a REST API.
+This service connects to the OctTools external API to monitor appliances. When it finds appliances that haven't been heard from 
+in over 10 minutes and are still marked as "LIVE", it automatically drains and remediates them. All operations are recorded and can be queried via a REST API.
 
 ## How It Works
 
@@ -17,7 +18,7 @@ This service connects to the OctTools external API to monitor appliances. When i
 
 - Automatic monitoring of appliance status
 - Concurrent processing of multiple appliances
-- Retry logic for handling API failures with backoff and jitter
+- Retry logic for handling API failures with exponential backoff
 - Operation tracking with in-memory storage
 - REST API for querying results
 - Health monitoring endpoint
@@ -27,47 +28,43 @@ This service connects to the OctTools external API to monitor appliances. When i
 ### Scheduling Strategy
 The application uses a single scheduled task for monitoring with immediate async processing:
 
-- Data Collection (`@Scheduled(fixedRate = 300000)`) - Runs every 5 minutes to fetch appliances and identify stale ones
+- Data Collection `@Scheduled(fixedRate = 300000)` - Runs every 5 minutes to fetch appliances and identify stale ones
 - Immediate Processing - Stale appliances are submitted to a bounded executor for concurrent processing
 
 This approach ensures consistent monitoring intervals while providing immediate processing of detected stale appliances.
 
 ### Concurrency Model
 - Single-threaded data collection with per-page processing
-- Multi-threaded appliance processing using a bounded ThreadPoolExecutor (75 threads, 2,500-task queue)
+- Multi-threaded appliance processing using a bounded ThreadPoolExecutor with100 threads and 2,500-task queue
 - Immediate async processing with natural backpressure and graceful overflow handling
 
 ### Processing Architecture Design
 The application implements immediate async processing with several key design decisions:
 
 Bounded Resources:
-- Thread Pool: Fixed 75 threads for predictable resource usage
-- Executor Queue: Maximum 2,500 tasks to provide backpressure
-- Per-page Processing: Appliances processed as pages are collected
+- Thread Pool is fixed at 100 threads which is optimized to complete all processing before next collection cycle
+- Executor Queue has a maximum of 2,500 tasks to provide backpressure
+- Appliances are processed as pages are collected
 
 Processing Strategy:
 - Immediate submission of stale appliances to executor upon detection
 - When executor queue fills, overflow appliances are skipped and retried in next monitoring cycle
 - Concurrent processing of multiple appliances with proper error isolation
 
-State Management:
-- Graceful Overflow: When executor capacity exceeded, appliances are retried in next cycle
-- Error Isolation: Individual appliance failures don't affect processing of others
-- Automatic Recovery: Failed appliances are rediscovered and retried in subsequent monitoring cycles
-
 This architecture provides high throughput while maintaining bounded memory usage and graceful handling of overload conditions.
 
 ### External API Integration
 Connects to the OctTools homework API:
 - Base URL: `oct-backend-homework.us-east-1.elasticbeanstalk.com`
-- Authentication: Basic auth (configured in application.yml)
-- Pagination: Cursor-based pagination for fetching all appliances
-- Operations: Drain and remediate API calls with retry logic
+- Basic auth is configured in application.yml
+- Cursor-based pagination for fetching all appliances
+- Drain and remediate API calls with retry logic
 
 Retry Strategy:
-- All APIs: 5 retries with 1000ms delay, 2x backoff (1s, 2s, 4s, 8s delays)
-  - 5 attempts provide excellent resilience against transient API failures
-  - Conservative initial retry (1000ms) with exponential backoff balances stability and recovery speed
+- Collection APIs: 4 retries with 500ms delay, 1.5x backoff (0.5s, 0.75s, 1.125s, 1.6875s delays)
+- Processing APIs: 4 retries with 500ms delay, 1.1x backoff (0.5s, 0.55s, 0.605s, 0.666s delays)
+  - 5 total attempts 1 initial + 4 retries provides excellent resilience against transient API failures
+  - Fast initial retry (500ms) with optimized backoff multipliers for different operation types
   - Collection API failures break entire pagination cycle, so robust retry is critical
   - Operation API failures are isolated per appliance, allowing other processing to continue
 
@@ -81,11 +78,11 @@ appliance:
     base-url: http://oct-backend-homework.us-east-1.elasticbeanstalk.com:8080
     auth-header: Basic b2N0QXBwbGljYW50OmIwZTg1YWE4LWQ2YWUtNGQzYi1iODA5LTA0ZDIwN2VkZTNmNQ==
     page-size: 100
-    timeout-seconds: 30
+    timeout-seconds: 5
   processing:
     actor-email: engineer@company.com
     stale-threshold-minutes: 10
-    thread-pool-size: 75
+    thread-pool-size: 100
 ```
 
 ## Running the Application
@@ -96,12 +93,12 @@ appliance:
 
 ### Quick Start
 ```bash
-# Option 1: Build and run JAR
+# Option 1: Run with Maven
+mvn spring-boot:run
+
+# Option 3: Build and run JAR
 mvn clean package
 java -jar target/appliance-monitor-1.0.0.jar
-
-# Option 2: Run with Maven
-mvn spring-boot:run
 ```
 
 Application starts on `http://localhost:8080`
@@ -275,7 +272,7 @@ Watch application logs to see real-time processing:
 
 ## Data Storage
 
-Important: Operation data is stored in-memory only and is lost when the application restarts. This is appropriate for the assignment scope but would need database persistence for production use.
+Important: Operation data is stored in-memory only and is lost when the application restarts.
 
 ## Testing
 
@@ -317,10 +314,9 @@ src/main/java/com/octtools/appliance/
 - Components can scale independently based on different needs
 
 ### Why Immediate Async Processing Over Producer/Consumer?
-Initially considered a traditional producer/consumer pattern with a queue, but the external API's dataset volatility made this approach unsuitable:
-- Appliances exist in the external system for only 2-3 minutes
-- Must process within minutes of detection to avoid 404 errors
-- Even minimal queuing delays (100ms polling) caused appliances to disappear before processing
+Initially considered a producer/consumer pattern with a queue, but the external API's dataset volatility made this approach unsuitable.
+- Appliances have an extremely short time period for drain success after being discovered as stale
+- Even minimal queuing delays if 100ms polling caused appliances to fail all drain attempts
 - Direct async submission to bounded executor eliminates queue delays while maintaining thread safety and natural backpressure
 
 ### Why ThreadPoolExecutor vs Other Async Options?
@@ -331,12 +327,15 @@ Chose ThreadPoolExecutor over alternatives for predictable resource management:
 - Result: Direct control over concurrency with bounded resources and graceful overflow handling
 
 ### ThreadPool Sizing Rationale
-Configuration: 75 threads + 2,500 queue capacity = 2,575 total system capacity
+Configuration: 100 threads + 2,500 queue capacity = 2,600 total system capacity
 
-**Thread Count 75:**
-- Optimized for I/O-bound workload where threads spend ~400ms waiting for API responses
-- Performance testing showed 75 threads provide optimal balance of throughput and system stability
-- Balances high throughput with resource efficiency and external API capacity limits
+**Thread Count 100:**
+
+The 100-thread configuration ensures processing completes within the 5-minute cycle interval, minimizing appliance aging and 404 errors. 
+Thread count would be tuned in a production environment based on load testing and external API performance characteristics.
+- Optimized for I/O-bound workload where threads spend minimum of 400ms waiting for API responses
+- Performance testing showed 100 threads provide optimal throughput to complete processing within 5-minute cycle intervals
+- Balances high throughput with resource efficiency
 - Higher counts risk overwhelming the external API server with concurrent requests
 
 **Queue Size 2,500:**
@@ -359,7 +358,7 @@ For production deployment, consider:
 
 ## Known Limitations
 
-- Operation history lost on application restart (by design for assignment scope)
+- Operation history lost on application restart
 - Basic error handling without circuit breaker patterns
 
 These limitations are appropriate for the assignment scope and are noted for future enhancement.

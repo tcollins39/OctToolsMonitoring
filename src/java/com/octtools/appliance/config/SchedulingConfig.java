@@ -13,6 +13,7 @@ public class SchedulingConfig {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(5);
         scheduler.setThreadNamePrefix("scheduler-");
+        scheduler.setThreadPriority(Thread.MAX_PRIORITY); // Highest priority to prevent starvation
         scheduler.initialize();
         return scheduler;
     }

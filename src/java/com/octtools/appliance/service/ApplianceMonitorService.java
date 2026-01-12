@@ -72,13 +72,15 @@ public class ApplianceMonitorService {
                     totalAppliancesProcessed, staleAppliancesFound, elapsed.toMillis());
             
             // Emit metrics for monitoring
-            log.info("METRIC: appliances.total.count={}", totalAppliancesProcessed);
-            log.info("METRIC: appliances.stale.count={}", staleAppliancesFound);
-            log.info("METRIC: collection.duration.ms={}", elapsed.toMillis());
+            log.debug("METRIC: appliances.total.count={}", totalAppliancesProcessed);
+            log.debug("METRIC: appliances.stale.count={}", staleAppliancesFound);
+            log.debug("METRIC: collection.duration.ms={}", elapsed.toMillis());
+            log.debug("METRIC: collection.success.ratio=1");
             
         } catch (Exception e) {
             Duration elapsed = Duration.between(startTime, Instant.now());
             log.error("Collection cycle failed after {}ms", elapsed.toMillis(), e);
+            log.debug("METRIC: collection.success.ratio=0");
             log.info("METRIC: collection.failures.count=1");
         }
     }
